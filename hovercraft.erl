@@ -20,7 +20,7 @@
     delete_doc/2,
     start_attachment/3,
     next_attachment_bytes/1,
-    query_view/4 % not yet implemented
+    query_view/4 % coming soon
 ]).
 
 -include("../../couchdb/include/couch_db.hrl").
