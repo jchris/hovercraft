@@ -103,7 +103,7 @@ save_doc(DbName, {DocProps}) ->
 %% Description: Deletes the doc
 %%--------------------------------------------------------------------
 delete_doc(DbName, {DocProps}) ->
-    save_doc(DbName, {[{<<"deleted">>, true}|DocProps]}).
+    save_doc(DbName, {[{<<"_deleted">>, true}|DocProps]}).
 
 
 %%--------------------------------------------------------------------
