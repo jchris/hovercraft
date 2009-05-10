@@ -10,6 +10,9 @@ Use this to abstract CouchDB behind a simple Erlang function call. Currently sup
 
 ## Basic Usage
 
+NOTE: Hovercraft is only compatible with CouchDB trunk. If the tests fail, 
+make sure you are running on the latest latest CouchDB.
+
 The easiest way to try Hovercraft is to put the hovercraft directory 
 inside the CouchDB trunk directory and then launch CouchDB like this:
 
