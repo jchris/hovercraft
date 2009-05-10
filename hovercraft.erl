@@ -3,12 +3,35 @@
 %%% Author  : J Chris Anderson <jchris@couch.io>
 %%% Description : Erlang CouchDB access.
 %%%
-%%% Created :  4 Apr 2009 by J Chris Anderson <jchris@couch.io>
+%%% Created : 4 Apr 2009 by J Chris Anderson <jchris@couch.io>
+%%% License : Apache 2.0 
 %%%-------------------------------------------------------------------
 -module(hovercraft).
 
+%% The easiest way to try Hovercraft is to put the hovercraft directory 
+%% inside the CouchDB trunk directory and then launch CouchDB like this:
+%%
+%% erlc hovercraft/*erl && make dev && ERL_LIBS="hovercraft" utils/run -i
+%%
+%% This will open an interactive session. To run the tests, call 
+%% hovercraft:test/0 like this:
+%%
+%% 1> hovercraft:test().
+%% [info] [<0.30.0>] Starting tests in <<"hovercraft-test">>
+%% ok
+%%
+%% To run the speed of light test, run hovercraft:lightning/0 like this:
+%%
+%% 2> hovercraft:lightning().
+%% Inserted 100000 docs in 14.967256 seconds with batch size of 1000. (6681.251393040915 docs/sec)
+%% ok
+%%
+%% To try different tunings, you can call hovercraft:lightning/1 with 
+%% custom batch sizes. The docs in the speed of light test are small, feel
+%% free to edit the source code to try larger docs.
+
 %% Test API
--export([test/0]).
+-export([test/0, lightning/0, lightning/1]).
 
 %% Database API
 -export([
@@ -351,13 +374,39 @@ should_save_bulk_and_open_with_db(DbName) ->
             {ok, _Doc} = hovercraft:open_doc(Db, DocId)
         end, RevInfos, []).
     
-% create as many docs as possible in 30 seconds
-lightning(NumDocs) ->
-    BulkSize = 1000,
-    Doc = {[{<<"foo">>, <<"bar">>}]}.
+lightning() ->
+    lightning(1000).
 
+lightning(BulkSize) ->
+    lightning(BulkSize, 100000, <<"hovercraft-lightning">>).
 
-insert_doc_group(Db, Doc, GroupSize, IdInt) ->
-    % {DocsList, IdInt1} = make_docs_list(Doc, GroupSize, [], IdInt),
-    % {ok, _Revs} = couch_db:update_docs(Db, DocsList),
-    IdInt.
+lightning(BulkSize, NumDocs, DbName) ->
+    hovercraft:delete_db(DbName),
+    {ok, created} = hovercraft:create_db(DbName),
+    {ok, Db} = hovercraft:open_db(DbName),
+    Doc = {[{<<"foo">>, <<"bar">>}]},
+    StartTime = now(),    
+    insert_in_batches(Db, NumDocs, BulkSize, Doc, 0),
+    Duration = timer:now_diff(now(), StartTime) / 1000000,
+    io:format("Inserted ~p docs in ~p seconds with batch size of ~p. (~p docs/sec)~n",
+        [NumDocs, Duration, BulkSize, NumDocs / Duration]).
+
+insert_in_batches(Db, NumDocs, BulkSize, Doc, StartId) when NumDocs > 0 ->
+    LastId = insert_batch(Db, BulkSize, Doc, StartId),
+    insert_in_batches(Db, NumDocs - BulkSize, BulkSize, Doc, LastId+1);
+insert_in_batches(Db, NumDocs, BulkSize, Doc, StartId) ->
+    ok.
+
+insert_batch(Db, BulkSize, Doc, StartId) ->
+    {ok, Docs, LastId} = make_docs_list(Doc, BulkSize, [], StartId),
+    {ok, RevInfos} = hovercraft:save_bulk(Db, Docs),
+    LastId.
+
+make_docs_list({DocProps}, 0, Docs, Id) ->
+    {ok, Docs, Id};
+make_docs_list({DocProps}, Size, Docs, Id) ->
+    ThisDoc = {[{<<"_id">>, make_id_str(Id)}|DocProps]},
+    make_docs_list({DocProps}, Size - 1, [ThisDoc|Docs], Id + 1).
+
+make_id_str(Num) ->
+    ?l2b(lists:flatten(io_lib:format("z~30..0B", [Num]))).
