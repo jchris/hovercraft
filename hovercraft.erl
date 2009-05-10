@@ -14,6 +14,7 @@
 -export([
     create_db/1,
     delete_db/1,
+    open_db/1,
     db_info/1,
     open_doc/2, 
     save_doc/2,
@@ -57,7 +58,6 @@ create_db(DbName, Options) ->
 %% Function: delete_db(DbName) -> {ok,deleted} | {error,Error}
 %% Description: Deletes the database.
 %%--------------------------------------------------------------------
-
 delete_db(DbName) ->
     delete_db(DbName,  [?ADMIN_USER_CTX]).
     
@@ -68,6 +68,14 @@ delete_db(DbName, Options) ->
     Error ->
         {error, Error}
     end.
+
+%%--------------------------------------------------------------------
+%% Function: open_db(DbName) -> {ok,Db} | {error,Error}
+%% Description: Opens the database.
+%% Only use this if you are doing bulk operations and know what you are doing.
+%%--------------------------------------------------------------------
+open_db(DbName) ->
+    couch_db:open(DbName, [?ADMIN_USER_CTX]).
 
 %%--------------------------------------------------------------------
 %% Function: db_info(DbName) -> {ok,created} | {error,Error}
@@ -91,22 +99,26 @@ open_doc(DbName, DocId) ->
 %% Function: save_doc(DbName, Doc) -> {ok, EJsonInfo} | {error,Error}
 %% Description: Saves the doc the database, returns the id and rev
 %%--------------------------------------------------------------------
-save_doc(DbName, Doc) ->
-    {ok, Db} = open_db(DbName),
+save_doc(#db{}=Db, Doc) ->
     CouchDoc = ejson_to_couch_doc(Doc),
     {ok, Rev} = couch_db:update_doc(Db, CouchDoc, []),
-    {ok, {[{id, CouchDoc#doc.id}, {rev, couch_doc:rev_to_str(Rev)}]}}.
+    {ok, {[{id, CouchDoc#doc.id}, {rev, couch_doc:rev_to_str(Rev)}]}};
+save_doc(DbName, Docs) ->
+    {ok, Db} = open_db(DbName),
+    save_doc(Db, Docs).
 
 %%--------------------------------------------------------------------
 %% Function: save_bulk(DbName, Docs) -> {ok, EJsonInfo} | {error,Error}
 %% Description: Saves the docs the database, returns the ids and revs
 %%--------------------------------------------------------------------
-save_bulk(DbName, Docs) ->
-    {ok, Db} = open_db(DbName),
+save_bulk(#db{}=Db, Docs) ->
     CouchDocs = [ejson_to_couch_doc(EJsonDoc) || EJsonDoc <- Docs],
     {ok, Results} = couch_db:update_docs(Db, CouchDocs),
     {ok, lists:zipwith(fun couch_httpd_db:update_doc_result_to_json/2,
-        CouchDocs, Results)}.
+        CouchDocs, Results)};
+save_bulk(DbName, Docs) ->
+    {ok, Db} = open_db(DbName),
+    save_bulk(Db, Docs).
     
 
 %%--------------------------------------------------------------------
@@ -169,9 +181,6 @@ query_view(DbName, DesignName, ViewName, ViewFoldFun, #view_query_args{
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
-
-open_db(DbName) ->
-    couch_db:open(DbName, [?ADMIN_USER_CTX]).
 
 ejson_to_couch_doc({DocProps}) ->
     Doc = case proplists:get_value(<<"_id">>, DocProps) of
@@ -236,6 +245,7 @@ test(DbName) ->
     % should_query_view(DbName),
     should_error_on_missing_doc(DbName),
     should_save_bulk_docs(DbName),
+    should_save_bulk_and_open_with_db(DbName),
     ok.
     
 should_create_db(DbName) ->
@@ -332,6 +342,14 @@ should_save_bulk_docs(DbName) ->
             {ok, _Doc} = hovercraft:open_doc(DbName, DocId)
         end, RevInfos, []).
 
+should_save_bulk_and_open_with_db(DbName) ->
+    {ok, Db} = hovercraft:open_db(DbName),
+    Docs = [{[{<<"foo">>, <<"bar">>}]} || Seq <- lists:seq(1, 100)],
+    {ok, RevInfos} = hovercraft:save_bulk(Db, Docs),
+    lists:foldl(fun(Row, _) ->
+            DocId = proplists:get_value(id, Row),
+            {ok, _Doc} = hovercraft:open_doc(Db, DocId)
+        end, RevInfos, []).
     
 % create as many docs as possible in 30 seconds
 lightning(NumDocs) ->
