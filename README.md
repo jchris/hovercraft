@@ -25,6 +25,8 @@ hovercraft:test/0 like this:
     [info] [<0.30.0>] Starting tests in <<"hovercraft-test">>
     ok
 
+## Speed of Light
+
 To run the speed of light test, run hovercraft:lightning/0 like this:
 
     2> hovercraft:lightning().
