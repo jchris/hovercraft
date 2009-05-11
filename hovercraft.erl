@@ -45,7 +45,9 @@
     delete_doc/2,
     start_attachment/3,
     next_attachment_bytes/1,
-    query_view/5 % coming soon
+    query_view/3,
+    query_view/4,
+    query_view/5
 ]).
 
 % Hovercraft is designed to run inside the same beam process as CouchDB.
@@ -175,6 +177,21 @@ next_attachment_bytes(Pid) ->
            {Length, _Reason} = {size(Bin), "assert Bin length match"},
            {ok, Bin}
     end.
+
+query_view(DbName, DesignName, ViewName) ->
+    query_view(DbName, DesignName, ViewName, #view_query_args{}).
+   
+query_view(DbName, DesignName, ViewName, #view_query_args{}=QueryArgs) ->
+    % provide a default row collector fun
+    % don't use this on big data it will balloon in memory
+    RowCollectorFun = fun({{Key, DocId}, Value}, Acc) ->
+        {ok, [{{Key, DocId}, Value} | Acc]}
+    end,
+    query_view(DbName, DesignName, ViewName, RowCollectorFun, QueryArgs);
+
+query_view(DbName, DesignName, ViewName, ViewFoldFun) ->
+    query_view(DbName, DesignName, ViewName, ViewFoldFun, #view_query_args{}).
+
     
 query_view(DbName, DesignName, ViewName, ViewFoldFun, #view_query_args{
             limit = Limit,
@@ -191,15 +208,16 @@ query_view(DbName, DesignName, ViewName, ViewFoldFun, #view_query_args{
         <<"_design/", DesignName/binary>>, ViewName, Stale),
     {ok, RowCount} = couch_view:get_row_count(View),
     Start = {StartKey, StartDocId},
-    FoldlFun = couchdb_httpd_view:make_view_fold_fun(nil, QueryArgs, <<"">>, Db, RowCount, 
+    FoldlFun = couch_httpd_view:make_view_fold_fun(nil, QueryArgs, <<"">>, Db, RowCount, 
         #view_fold_helper_funs{
             reduce_count = fun couch_view:reduce_to_count/1,
-            start_response = fun start_map_view_fold_fun/4,
-            send_row = fun map_row_fold_fun/4
+            start_response = fun start_map_view_fold_fun/5,
+            send_row = make_map_row_fold_fun(ViewFoldFun)
         }),
     FoldAccInit = {Limit, SkipCount, undefined, []},
-    FoldResult = couch_view:fold(View, Start, Dir, FoldlFun, FoldAccInit),
-    {ok, FoldResult}.
+    {ok, {_, _, _, {Offset, ViewFoldAcc}}} = 
+        couch_view:fold(View, Start, Dir, FoldlFun, FoldAccInit),
+    {ok, {RowCount, Offset, ViewFoldAcc}}.
 
 %%--------------------------------------------------------------------
 %%% Internal functions
@@ -215,11 +233,14 @@ ejson_to_couch_doc({DocProps}) ->
     end,
     couch_doc:from_json_obj(Doc).
 
-start_map_view_fold_fun(Req2, _Etag, TotalViewCount, Offset) ->
-    ok.
+start_map_view_fold_fun(_Req, _Etag, _RowCount, Offset, Acc) ->
+    {ok, nil, {Offset, []}}.
 
-map_row_fold_fun(Resp, Db2, {{Key, DocId}, Value}, {RowFront, _IncludeDocs}) ->
-    ok.
+make_map_row_fold_fun(ViewFoldFun) ->
+    fun(_Resp, _Db, {{Key, DocId}, Value}, _IncludeDocs, {Offset, Acc}) ->
+        {Go, NewAcc} = ViewFoldFun({{Key, DocId}, Value}, Acc),
+        {Go, {Offset, NewAcc}}
+    end.
 
 attachment_streamer(DbName, DocId, AName) ->
     {ok, Db} = open_db(DbName),
@@ -265,7 +286,7 @@ test(DbName) ->
     should_get_db_info(DbName),
     should_save_and_open_doc(DbName),
     should_stream_attachment(DbName),
-    % should_query_view(DbName),
+    should_query_view(DbName),
     should_error_on_missing_doc(DbName),
     should_save_bulk_docs(DbName),
     should_save_bulk_and_open_with_db(DbName),
@@ -332,30 +353,35 @@ should_query_view(DbName) ->
     % make ddoc
     {ok, {Resp}} = hovercraft:save_doc(DbName, make_test_ddoc(<<"view-test">>)),
     % make docs
-    ok = make_test_docs(DbName, 20),
-    % query view
-    FoldFun = fun
-        (pattern) when guard ->
-            body
-    end,
-    Rows = hovercraft:query_view(DbName, <<"view-test">>, <<"basic">>, FoldFun),
-    ok.
+    {ok, RevInfos} = make_test_docs(DbName, {[{<<"hovercraft">>, <<"views rule">>}]}, 20),
+    % use the default query arguments and row collector function
+    {ok, {RowCount, Offset, Rows}} = 
+        hovercraft:query_view(DbName, <<"view-test">>, <<"basic">>),
+    % assert rows is the right length
+    20 = length(Rows),
+    RowCount = length(Rows),
+    0 = Offset,
+    % assert we got every row
+    lists:foldl(fun({{RKey, RDocId}, RValue}, _) -> 
+            1 = RValue,
+            {ok, {DocProps}} = hovercraft:open_doc(RDocId),
+            RKey = proplists:get_value(<<"_rev">>, DocProps)
+        end, Rows, []).
 
 make_test_ddoc(DesignName) ->
     {[
         {<<"_id">>, <<"_design/", DesignName/binary>>},
         {<<"views">>, {[{<<"basic">>, 
             {[
-                {<<"map">>, <<"function(doc) { emit(doc._rev, 1) }">>}
+                {<<"map">>, 
+  <<"function(doc) { if(doc.hovercraft == 'views rule') emit(doc._rev, 1) }">>}
             ]}
         }]}}
     ]}.
 
-make_test_docs(DbName, Count) ->
-    {ok, _} = lists:foldl(fun(S) -> 
-            {ok, _} = hovercraft:save_doc(DbName, {[{<<"foo">>, <<"bar">>}]})
-        end, lists:seq(0, Count)),
-    ok.
+make_test_docs(DbName, Doc, Count) ->
+    Docs = [Doc || Seq <- lists:seq(1, Count)],
+    hovercraft:save_bulk(DbName, Docs).
 
 should_save_bulk_docs(DbName) ->
     Docs = [{[{<<"foo">>, <<"bar">>}]} || Seq <- lists:seq(1, 100)],
@@ -373,7 +399,8 @@ should_save_bulk_and_open_with_db(DbName) ->
             DocId = proplists:get_value(id, Row),
             {ok, _Doc} = hovercraft:open_doc(Db, DocId)
         end, RevInfos, []).
-    
+
+% and now for the performance testing section
 lightning() ->
     lightning(1000).
 
@@ -409,4 +436,4 @@ make_docs_list({DocProps}, Size, Docs, Id) ->
     make_docs_list({DocProps}, Size - 1, [ThisDoc|Docs], Id + 1).
 
 make_id_str(Num) ->
-    ?l2b(lists:flatten(io_lib:format("z~30..0B", [Num]))).
+    ?l2b(lists:flatten(io_lib:format("z~10..0B", [Num]))).
