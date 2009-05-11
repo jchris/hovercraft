@@ -7,7 +7,7 @@
 %%% License : Apache 2.0
 %%%-------------------------------------------------------------------
 -module(hovercraft).
--vsn("0.1.1")
+-vsn("0.1.1").
 
 %% see README.mk for usage information
 
