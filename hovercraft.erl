@@ -179,26 +179,48 @@ query_view(DbName, DesignName, ViewName, ViewFoldFun, #view_query_args{
             skip = SkipCount,
             stale = Stale,
             direction = Dir,
+            group_level = GroupLevel,
             start_key = StartKey,
             start_docid = StartDocId,
-            end_key = EndKey
+            end_key = EndKey,
+            end_docid = EndDocId
         }=QueryArgs) ->
     {ok, Db} = open_db(DbName),
     % get view reference
-    {ok, View, Group} = couch_view:get_map_view(Db, 
-        <<"_design/", DesignName/binary>>, ViewName, Stale),
-    {ok, RowCount} = couch_view:get_row_count(View),
-    Start = {StartKey, StartDocId},
-    FoldlFun = couch_httpd_view:make_view_fold_fun(nil, QueryArgs, <<"">>, Db, RowCount, 
-        #view_fold_helper_funs{
-            reduce_count = fun couch_view:reduce_to_count/1,
-            start_response = fun start_map_view_fold_fun/5,
-            send_row = make_map_row_fold_fun(ViewFoldFun)
-        }),
-    FoldAccInit = {Limit, SkipCount, undefined, []},
-    {ok, {_, _, _, {Offset, ViewFoldAcc}}} = 
-        couch_view:fold(View, Start, Dir, FoldlFun, FoldAccInit),
-    {ok, {RowCount, Offset, ViewFoldAcc}}.
+    DesignId = <<"_design/", DesignName/binary>>,
+    case couch_view:get_map_view(Db, DesignId, ViewName, Stale) of
+        {ok, View, Group} ->
+            {ok, RowCount} = couch_view:get_row_count(View),
+            Start = {StartKey, StartDocId},
+            FoldlFun = couch_httpd_view:make_view_fold_fun(nil, 
+                QueryArgs, <<"">>, Db, RowCount, 
+                #view_fold_helper_funs{
+                    reduce_count = fun couch_view:reduce_to_count/1,
+                    start_response = fun start_map_view_fold_fun/5,
+                    send_row = make_map_row_fold_fun(ViewFoldFun)
+                }),
+            FoldAccInit = {Limit, SkipCount, undefined, []},
+            {ok, {_, _, _, {Offset, ViewFoldAcc}}} = 
+                couch_view:fold(View, Start, Dir, FoldlFun, FoldAccInit),
+            {ok, {RowCount, Offset, ViewFoldAcc}};
+        {not_found, Reason} ->
+            case couch_view:get_reduce_view(Db, DesignId, ViewName, Stale) of
+                {ok, View, Group} ->
+                    {ok, GroupRowsFun, RespFun} = 
+                        couch_httpd_view:make_reduce_fold_funs(nil, 
+                            GroupLevel, QueryArgs, <<"">>, 
+                            #reduce_fold_helper_funs{
+                                start_response = fun start_reduce_view_fold_fun/3,
+                                send_row = make_reduce_row_fold_fun(ViewFoldFun)
+                            }),
+                    FoldAccInit = {Limit, SkipCount, undefined, []},
+                    {ok, {_, _, Resp, _}} = couch_view:fold_reduce(View, Dir, {StartKey, StartDocId}, 
+                        {EndKey, EndDocId}, GroupRowsFun, RespFun, FoldAccInit),
+                    {ok, reduce};
+                _ ->
+                    throw({not_found, Reason})
+            end
+    end.
 
 %%--------------------------------------------------------------------
 %%% Internal functions
@@ -222,6 +244,16 @@ make_map_row_fold_fun(ViewFoldFun) ->
         {Go, NewAcc} = ViewFoldFun({{Key, DocId}, Value}, Acc),
         {Go, {Offset, NewAcc}}
     end.
+
+start_reduce_view_fold_fun(Req, Etag, _Acc0) ->
+    {ok, nil, []}.
+
+make_reduce_row_fold_fun(ViewFoldFun) ->
+    fun(_Resp, {Key, Value}, Acc) ->
+        {Go, NewAcc} = ViewFoldFun({Key, Value}, Acc),
+        {Go, NewAcc}
+    end.
+
 
 attachment_streamer(DbName, DocId, AName) ->
     {ok, Db} = open_db(DbName),
@@ -267,7 +299,7 @@ test(DbName) ->
     should_get_db_info(DbName),
     should_save_and_open_doc(DbName),
     should_stream_attachment(DbName),
-    should_query_view(DbName),
+    should_query_views(DbName),
     should_error_on_missing_doc(DbName),
     should_save_bulk_docs(DbName),
     should_save_bulk_and_open_with_db(DbName),
@@ -329,15 +361,19 @@ get_full_attachment(Pid, Acc) ->
             get_full_attachment(Pid, [Bin|Acc])
     end.
     
-% TODO: after CouchDB refactor
-should_query_view(DbName) ->
+should_query_views(DbName) ->
     % make ddoc
-    {ok, {Resp}} = hovercraft:save_doc(DbName, make_test_ddoc(<<"view-test">>)),
+    DDocName = <<"view-test">>,
+    {ok, {_Resp}} = hovercraft:save_doc(DbName, make_test_ddoc(DDocName)),
+    should_query_map_view(DbName, DDocName),
+    should_query_reduce_view(DbName, DDocName).
+    
+should_query_map_view(DbName, DDocName) ->
     % make docs
-    {ok, RevInfos} = make_test_docs(DbName, {[{<<"hovercraft">>, <<"views rule">>}]}, 20),
+    {ok, _RevInfos} = make_test_docs(DbName, {[{<<"hovercraft">>, <<"views rule">>}]}, 20),
     % use the default query arguments and row collector function
     {ok, {RowCount, Offset, Rows}} = 
-        hovercraft:query_view(DbName, <<"view-test">>, <<"basic">>),
+        hovercraft:query_view(DbName, DDocName, <<"basic">>),
     % assert rows is the right length
     20 = length(Rows),
     RowCount = length(Rows),
@@ -349,23 +385,39 @@ should_query_view(DbName) ->
             RKey = proplists:get_value(<<"_rev">>, DocProps)
         end, Rows, []).
 
+should_query_reduce_view(DbName, DDocName) ->
+    % make docs
+    {ok, _RevInfos} = make_test_docs(DbName, {[{<<"hovercraft">>, <<"views rule">>}]}, 20),
+    {ok, {RowCount, Offset, Rows}} = 
+        hovercraft:query_view(DbName, DDocName, <<"reduce-sum">>).
+    
+
 make_test_ddoc(DesignName) ->
     {[
         {<<"_id">>, <<"_design/", DesignName/binary>>},
-        {<<"views">>, {[{<<"basic">>, 
-            {[
-                {<<"map">>, 
-  <<"function(doc) { if(doc.hovercraft == 'views rule') emit(doc._rev, 1) }">>}
-            ]}
-        }]}}
+        {<<"views">>, {[
+            {<<"basic">>, 
+                {[
+                    {<<"map">>, 
+<<"function(doc) { if(doc.hovercraft == 'views rule') emit(doc._rev, 1) }">>}
+                ]}
+            },{<<"reduce-sum">>,
+                {[
+                    {<<"map">>,
+<<"function(doc) { if(doc.hovercraft == 'views rule') emit(doc._rev, 1) }">>},
+                    {<<"reduce">>,
+                    <<"function(ks,vs,co){ return sum(vs)}">>}
+                ]}
+            }
+        ]}}
     ]}.
 
 make_test_docs(DbName, Doc, Count) ->
-    Docs = [Doc || Seq <- lists:seq(1, Count)],
+    Docs = [Doc || _Seq <- lists:seq(1, Count)],
     hovercraft:save_bulk(DbName, Docs).
 
 should_save_bulk_docs(DbName) ->
-    Docs = [{[{<<"foo">>, <<"bar">>}]} || Seq <- lists:seq(1, 100)],
+    Docs = [{[{<<"foo">>, <<"bar">>}]} || _Seq <- lists:seq(1, 100)],
     {ok, RevInfos} = hovercraft:save_bulk(DbName, Docs),
     lists:foldl(fun(Row, _) ->
             DocId = proplists:get_value(id, Row),
@@ -374,7 +426,7 @@ should_save_bulk_docs(DbName) ->
 
 should_save_bulk_and_open_with_db(DbName) ->
     {ok, Db} = hovercraft:open_db(DbName),
-    Docs = [{[{<<"foo">>, <<"bar">>}]} || Seq <- lists:seq(1, 100)],
+    Docs = [{[{<<"foo">>, <<"bar">>}]} || _Seq <- lists:seq(1, 100)],
     {ok, RevInfos} = hovercraft:save_bulk(Db, Docs),
     lists:foldl(fun(Row, _) ->
             DocId = proplists:get_value(id, Row),
@@ -402,15 +454,15 @@ lightning(BulkSize, NumDocs, DbName) ->
 insert_in_batches(Db, NumDocs, BulkSize, Doc, StartId) when NumDocs > 0 ->
     LastId = insert_batch(Db, BulkSize, Doc, StartId),
     insert_in_batches(Db, NumDocs - BulkSize, BulkSize, Doc, LastId+1);
-insert_in_batches(Db, NumDocs, BulkSize, Doc, StartId) ->
+insert_in_batches(_, _, _, _, _) ->
     ok.
 
 insert_batch(Db, BulkSize, Doc, StartId) ->
     {ok, Docs, LastId} = make_docs_list(Doc, BulkSize, [], StartId),
-    {ok, RevInfos} = hovercraft:save_bulk(Db, Docs),
+    {ok, _RevInfos} = hovercraft:save_bulk(Db, Docs),
     LastId.
 
-make_docs_list({DocProps}, 0, Docs, Id) ->
+make_docs_list({_DocProps}, 0, Docs, Id) ->
     {ok, Docs, Id};
 make_docs_list({DocProps}, Size, Docs, Id) ->
     ThisDoc = {[{<<"_id">>, make_id_str(Id)}|DocProps]},
