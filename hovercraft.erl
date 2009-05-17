@@ -165,8 +165,8 @@ query_view(DbName, DesignName, ViewName) ->
 query_view(DbName, DesignName, ViewName, #view_query_args{}=QueryArgs) ->
     % provide a default row collector fun
     % don't use this on big data it will balloon in memory
-    RowCollectorFun = fun({{Key, DocId}, Value}, Acc) ->
-        {ok, [{{Key, DocId}, Value} | Acc]}
+    RowCollectorFun = fun(Row, Acc) ->
+        {ok, [Row | Acc]}
     end,
     query_view(DbName, DesignName, ViewName, RowCollectorFun, QueryArgs);
 
@@ -214,9 +214,9 @@ query_view(DbName, DesignName, ViewName, ViewFoldFun, #view_query_args{
                                 send_row = make_reduce_row_fold_fun(ViewFoldFun)
                             }),
                     FoldAccInit = {Limit, SkipCount, undefined, []},
-                    {ok, {_, _, Resp, _}} = couch_view:fold_reduce(View, Dir, {StartKey, StartDocId}, 
+                    {ok, {_, _, _, AccResult}} = couch_view:fold_reduce(View, Dir, {StartKey, StartDocId}, 
                         {EndKey, EndDocId}, GroupRowsFun, RespFun, FoldAccInit),
-                    {ok, reduce};
+                    {ok, AccResult};
                 _ ->
                     throw({not_found, Reason})
             end
@@ -365,12 +365,12 @@ should_query_views(DbName) ->
     % make ddoc
     DDocName = <<"view-test">>,
     {ok, {_Resp}} = hovercraft:save_doc(DbName, make_test_ddoc(DDocName)),
+    % make docs
+    {ok, _RevInfos} = make_test_docs(DbName, {[{<<"hovercraft">>, <<"views rule">>}]}, 20),
     should_query_map_view(DbName, DDocName),
     should_query_reduce_view(DbName, DDocName).
     
 should_query_map_view(DbName, DDocName) ->
-    % make docs
-    {ok, _RevInfos} = make_test_docs(DbName, {[{<<"hovercraft">>, <<"views rule">>}]}, 20),
     % use the default query arguments and row collector function
     {ok, {RowCount, Offset, Rows}} = 
         hovercraft:query_view(DbName, DDocName, <<"basic">>),
@@ -386,10 +386,9 @@ should_query_map_view(DbName, DDocName) ->
         end, Rows, []).
 
 should_query_reduce_view(DbName, DDocName) ->
-    % make docs
-    {ok, _RevInfos} = make_test_docs(DbName, {[{<<"hovercraft">>, <<"views rule">>}]}, 20),
-    {ok, {RowCount, Offset, Rows}} = 
-        hovercraft:query_view(DbName, DDocName, <<"reduce-sum">>).
+    {ok, [Result]} = 
+        hovercraft:query_view(DbName, DDocName, <<"reduce-sum">>),
+    {null, 20} = Result.
     
 
 make_test_ddoc(DesignName) ->
