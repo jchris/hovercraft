@@ -388,8 +388,13 @@ should_query_map_view(DbName, DDocName) ->
 should_query_reduce_view(DbName, DDocName) ->
     {ok, [Result]} = 
         hovercraft:query_view(DbName, DDocName, <<"reduce-sum">>),
-    {null, 20} = Result.
-    
+    {null, 20} = Result,
+    {ok, Results} = 
+        hovercraft:query_view(DbName, DDocName, <<"reduce-sum">>, #view_query_args{
+            group_level = exact
+        }),
+    20 = length(Results).
+
 
 make_test_ddoc(DesignName) ->
     {[
