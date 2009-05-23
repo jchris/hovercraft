@@ -155,7 +155,7 @@ next_attachment_bytes(Pid) ->
         {attachment_done, Pid} ->
             {ok, done};
         {attachment_bytes, Pid, {Bin, Length}} ->
-           {Length, _Reason} = {size(Bin), "assert Bin length match"},
+           {Length, _Reason} = {length(Bin), "assert Bin length match"},
            {ok, Bin}
     end.
 
@@ -268,7 +268,7 @@ attachment_streamer(DbName, DocId, AName) ->
                 fun(BinSegment, []) ->
                     receive
                         {next_attachment_bytes, From} ->
-                            From ! {attachment_bytes, Me, {BinSegment, size(BinSegment)}}
+                            From ! {attachment_bytes, Me, {BinSegment, length(BinSegment)}}
                     end,
                     {ok, []}
                 end,
