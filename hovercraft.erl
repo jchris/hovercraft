@@ -265,7 +265,8 @@ attachment_streamer(DbName, DocId, AName) ->
         {_Type, BinPointer} ->
             Me = self(),
             couch_doc:bin_foldl(BinPointer,
-                fun(BinSegment, []) ->
+                fun(Bins, []) ->
+                    BinSegment = list_to_binary(Bins),
                     receive
                         {next_attachment_bytes, From} ->
                             From ! {attachment_bytes, Me, {BinSegment, size(BinSegment)}}
