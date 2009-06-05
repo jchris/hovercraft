@@ -12,7 +12,7 @@
 %% see README.mk for usage information
 
 %% Test API
--export([test/0, lightning/0, lightning/1]).
+-export([test/0, test_chain/0, lightning/0, lightning/1]).
 
 %% Database API
 -export([
@@ -290,6 +290,41 @@ attachment_streamer(DbName, DocId, AName) ->
 %%% Rock!
 %%--------------------------------------------------------------------
 
+% chain
+
+chain(SourceDbName, SourceDDocName, SourceView, TargetDbName) ->
+    {ok, Db} = hovercraft:open_db(TargetDbName),
+    CopyToDbFun = fun
+        (Row, Acc) when length(Acc) > 50 ->
+            hovercraft:save_bulk(Db, [row_to_doc(Row)|Acc]),
+            {ok, []};
+        (Row, Acc) ->
+            {ok, [row_to_doc(Row)|Acc]}
+    end,
+    {ok, Acc1} = hovercraft:query_view(SourceDbName, SourceDDocName, SourceView, CopyToDbFun, #view_query_args{
+        group_level = exact
+    }),
+    hovercraft:save_bulk(Db, Acc1),
+    ok.
+
+row_to_doc({Key, Value}) ->
+    {[
+    {<<"key">>, Key},
+    {<<"value">>,Value}
+    ]}.
+    
+test_chain() ->
+    DbName = <<"chain-test">>,
+    TargetName = <<"chain-results-test">>,
+    should_create_db(DbName),
+    should_create_db(TargetName),
+    % make ddoc
+    DDocName = <<"view-test">>,
+    {ok, {_Resp}} = hovercraft:save_doc(DbName, make_test_ddoc(DDocName)),
+    % make docs
+    {ok, _RevInfos} = make_test_docs(DbName, {[{<<"lorem">>, <<"Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.">>}]}, 200),
+    chain(DbName, <<"view-test">>, <<"letter-cloud">>, TargetName).
+
 test() ->
     test(<<"hovercraft-test">>).
 
@@ -413,6 +448,18 @@ make_test_ddoc(DesignName) ->
                     {<<"reduce">>,
                     <<"function(ks,vs,co){ return sum(vs)}">>}
                 ]}
+            },{<<"letter-cloud">>, 
+                {[
+                    {<<"map">>,
+                    <<"function(doc){if (doc.lorem) {
+                        for (var i=0; i < doc.lorem.length; i++) {
+                          var c = doc.lorem[i];
+                          emit(c,1)
+                        };
+                    }}">>},
+                    {<<"reduce">>,
+                        <<"_count">>}
+                ]}
             }
         ]}}
     ]}.
@@ -475,3 +522,4 @@ make_docs_list({DocProps}, Size, Docs, Id) ->
 
 make_id_str(Num) ->
     ?l2b(lists:flatten(io_lib:format("~10..0B", [Num]))).
+
