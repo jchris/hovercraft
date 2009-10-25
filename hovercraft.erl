@@ -35,7 +35,7 @@
 % It calls into CouchDB's database access functions, so it needs access
 % to the disk. To hook it up, make sure hovercraft is in the Erlang load 
 % path and ensure that the following line points to CouchDB's hrl file.
--include("src/couchdb/couch_db.hrl").
+-include("couch_db.hrl").
 
 -define(ADMIN_USER_CTX, {user_ctx, #user_ctx{roles=[<<"_admin">>]}}).
 
@@ -200,8 +200,12 @@ query_view(DbName, DesignName, ViewName, ViewFoldFun, #view_query_args{
                     send_row = make_map_row_fold_fun(ViewFoldFun)
                 }),
             FoldAccInit = {Limit, SkipCount, undefined, []},
-            {ok, {_, _, _, {Offset, ViewFoldAcc}}} = 
-                couch_view:fold(View, Start, Dir, FoldlFun, FoldAccInit),
+	    Options = [{dir, Dir}, {start_key, Start}],
+
+%%             {ok, {_, _, _, {Offset, ViewFoldAcc}}} = 
+%%                 couch_view:fold(View, FoldlFun, FoldAccInit, Options),
+            {ok, {_, [{Offset, _}]} , ViewFoldAcc} = 
+                couch_view:fold(View, FoldlFun, FoldAccInit, Options),
             {ok, {RowCount, Offset, ViewFoldAcc}};
         {not_found, Reason} ->
             case couch_view:get_reduce_view(Db, DesignId, ViewName, Stale) of
@@ -258,7 +262,7 @@ make_reduce_row_fold_fun(ViewFoldFun) ->
 attachment_streamer(DbName, DocId, AName) ->
     {ok, Db} = open_db(DbName),
     case couch_db:open_doc(Db, DocId, []) of
-    {ok, #doc{attachments=Attachments}=Doc} ->
+    {ok, #doc{atts=Attachments}=Doc} ->
         case proplists:get_value(AName, Attachments) of
         undefined ->
             throw({not_found, "Document is missing attachment"});
