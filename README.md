@@ -61,16 +61,16 @@ To run the complete test suite try:
 
 The test suite includes the 'lightning' tests which exercise CouchDB at its maximum speed.
 
-To run the speed of light test, run hovercraft:lightning/0 like this (It defaults to batch size of '1000'):
+To run the speed of light test, run hovercraft_test:lightning/0 like this (It defaults to batch size of '1000'):
 
-    2> hovercraft:lightning().
+    2> hovercraft_test:lightning().
     Inserted 100000 docs in 20.638469 seconds with batch size of 1000. (4845.3206485422925 docs/sec)
     ok
 
-To try different tunings, you can call hovercraft:lightning/1 with
+To try different tunings, you can call hovercraft_test:lightning/1 with
 custom batch sizes:
 
-    3> hovercraft:lightning(100).
+    3> hovercraft_test:lightning(100).
     Inserted 100000 docs in 22.853769 seconds with batch size of 100. (4375.645872678594 docs/sec)
     ok
 
