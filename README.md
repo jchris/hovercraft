@@ -76,6 +76,57 @@ custom batch sizes:
 
 The docs in the speed of light test are small, feel free to edit the source code to try larger docs.
 
+## TODO
+
+Hovercraft is currently only partially functional with the current trunk (0.11.x).  The following
+issues (and probably more!) currently need to be resolved (patches welcome!):
+
+hovercraft_test:chain/0
+
+    hovercraft_test:chain/0 calls hovercraft:query_view/5 and throws the following exception:
+
+    2> hovercraft_test:chain().
+    [info] [<0.131.0>] checkpointing view update at seq 2 for chain-test _design/view-test
+    [info] [<0.131.0>] checkpointing view update at seq 180 for chain-test _design/view-test
+    [info] [<0.131.0>] checkpointing view update at seq 201 for chain-test _design/view-test
+    ** exception error: undefined function couch_view:fold_reduce/7
+         in function  hovercraft:query_view/5
+         in call from hovercraft_test:do_chain/4
+
+
+hovercraft_test:all/0
+
+    The call (currently commented out) to 'should_stream_attachment(DbName)' fails with the error:
+
+    1> hovercraft_test:all().
+		[info] [<0.31.0>] Starting tests in <<"hovercraft-test">>
+		[error] [emulator] Error in process <0.128.0> with exit value: {{nocatch,{not_found,"Document is missing attachment"}},[{hovercraft,attachment_streamer,3}]}
+
+
+
+		=ERROR REPORT==== 7-Nov-2009::14:02:55 ===
+		Error in process <0.128.0> with exit value: {{nocatch,{not_found,"Document is missing attachment"}},[{hovercraft,attachment_streamer,3}]}
+
+		** exception exit: {nocatch,{not_found,"Document is missing attachment"}}
+		     in function  hovercraft:attachment_streamer/3
+
+hovercraft_test:all/0
+
+    The call (currently commented out) to 'should_query_views(DbName)' fails with the error:
+
+    1> hovercraft_test:all().
+		[info] [<0.31.0>] Starting tests in <<"hovercraft-test">>
+		[error] [emulator] Error in process <0.122.0> with exit value: {{nocatch,{not_found,"Document is missing attachment"}},[{hovercraft,attachment_streamer,3}]}
+
+
+
+		=ERROR REPORT==== 7-Nov-2009::14:05:10 ===
+		Error in process <0.122.0> with exit value: {{nocatch,{not_found,"Document is missing attachment"}},[{hovercraft,attachment_streamer,3}]}
+
+		** exception exit: {nocatch,{not_found,"Document is missing attachment"}}
+		     in function  hovercraft:attachment_streamer/3
+
+
 ## Credits
 
 Released at #CouchHack '09

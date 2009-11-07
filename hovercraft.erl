@@ -215,6 +215,7 @@ query_view(DbName, DesignName, ViewName, ViewFoldFun, #view_query_args{
                                 send_row = make_reduce_row_fold_fun(ViewFoldFun)
                             }),
                     FoldAccInit = {Limit, SkipCount, undefined, []},
+                    %% FIXME : tests throw exception error: undefined function couch_view:fold_reduce/7
                     {ok, {_, _, _, AccResult}} = couch_view:fold_reduce(View, Dir, {StartKey, StartDocId},
                         {EndKey, EndDocId}, GroupRowsFun, RespFun, FoldAccInit),
                     {ok, AccResult};
