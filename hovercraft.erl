@@ -84,7 +84,7 @@ open_db(DbName) ->
     couch_db:open(DbName, [?ADMIN_USER_CTX]).
 
 %%--------------------------------------------------------------------
-%% Function: db_info(DbName) -> {ok,created} | {error,Error}
+%% Function: db_info(DbName) -> {ok,Db} | {error,Error}
 %% Description: Gets the db_info as a proplist
 %%--------------------------------------------------------------------
 db_info(DbName) ->
@@ -92,8 +92,8 @@ db_info(DbName) ->
     couch_db:get_db_info(Db).
 
 %%--------------------------------------------------------------------
-%% Function: open_doc(DbName, DocId) -> {ok,created} | {error,Error}
-%% Description: Gets the eJSON form of the db_info
+%% Function: open_doc(DbName, DocId) -> {ok,Doc} | {error,Error}
+%% Description: Gets the eJSON form of the Document
 %%--------------------------------------------------------------------
 open_doc(DbName, DocId) ->
     {ok, Db} = open_db(DbName),
@@ -103,7 +103,7 @@ open_doc(DbName, DocId) ->
 
 %%--------------------------------------------------------------------
 %% Function: save_doc(DbName, Doc) -> {ok, EJsonInfo} | {error,Error}
-%% Description: Saves the doc the database, returns the id and rev
+%% Description: Saves the doc in the database, returns the id and rev
 %%--------------------------------------------------------------------
 save_doc(#db{}=Db, Doc) ->
     CouchDoc = ejson_to_couch_doc(Doc),
@@ -115,7 +115,7 @@ save_doc(DbName, Docs) ->
 
 %%--------------------------------------------------------------------
 %% Function: save_bulk(DbName, Docs) -> {ok, EJsonInfo} | {error,Error}
-%% Description: Saves the docs the database, returns the ids and revs
+%% Description: Saves the docs in the database, returns the ids and revs
 %%--------------------------------------------------------------------
 save_bulk(#db{}=Db, Docs) ->
     CouchDocs = [ejson_to_couch_doc(EJsonDoc) || EJsonDoc <- Docs],
@@ -146,7 +146,7 @@ start_attachment(DbName, DocId, AName) ->
     {ok, Pid}.
 
 %%--------------------------------------------------------------------
-%% Function: next_attachment_bytes(Pid) -> {ok, Done} | {error,Error}
+%% Function: next_attachment_bytes(Pid) -> {ok, done} | {error,Error}
 %% Description: Fetch attachment bytes
 %%--------------------------------------------------------------------
 next_attachment_bytes(Pid) ->
