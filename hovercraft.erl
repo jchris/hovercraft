@@ -35,7 +35,7 @@
 % It calls into CouchDB's database access functions, so it needs access
 % to the disk. To hook it up, make sure hovercraft is in the Erlang load
 % path and ensure that the following line points to CouchDB's hrl file.
--include("couch_db.hrl").
+-include("src/couchdb/couch_db.hrl").
 
 -define(ADMIN_USER_CTX, {user_ctx, #user_ctx{roles=[<<"_admin">>]}}).
 
