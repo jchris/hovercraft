@@ -9,7 +9,7 @@
 -module(hovercraft).
 -vsn("0.1.1").
 
-%% see README.mk for usage information
+%% see README.md for usage information
 
 %% Test API
 -export([test/0, test_chain/0, lightning/0, lightning/1]).
