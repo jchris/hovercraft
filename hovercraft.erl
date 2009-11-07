@@ -146,8 +146,8 @@ start_attachment(DbName, DocId, AName) ->
     {ok, Pid}.
 
 %%--------------------------------------------------------------------
-%% Function: start_attachment(DbName, DocId, AName) -> {ok, Pid} | {error,Error}
-%% Description: Starts a process to use for fetching attachment bytes
+%% Function: next_attachment_bytes(Pid) -> {ok, Done} | {error,Error}
+%% Description: Fetch attachment bytes
 %%--------------------------------------------------------------------
 next_attachment_bytes(Pid) ->
     Pid ! {next_attachment_bytes, self()},
