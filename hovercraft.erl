@@ -163,6 +163,7 @@ query_view(DbName, DesignName, ViewName, #view_query_args{}=QueryArgs) ->
     % provide a default row collector fun
     % don't use this on big data it will balloon in memory
     RowCollectorFun = fun(Row, Acc) ->
+        % ?LOG_INFO("Row ~p", [Row]),
         {ok, [Row | Acc]}
     end,
     query_view(DbName, DesignName, ViewName, RowCollectorFun, QueryArgs);
@@ -189,6 +190,7 @@ query_view(DbName, DesignName, ViewName, ViewFoldFun, #view_query_args{
         {ok, View, Group} ->
             {ok, RowCount} = couch_view:get_row_count(View),
             Start = {StartKey, StartDocId},
+            End = {EndKey, EndDocId},
             FoldlFun = couch_httpd_view:make_view_fold_fun(nil,
                 QueryArgs, <<"">>, Db, RowCount,
                 #view_fold_helper_funs{
@@ -197,11 +199,8 @@ query_view(DbName, DesignName, ViewName, ViewFoldFun, #view_query_args{
                     send_row = make_map_row_fold_fun(ViewFoldFun)
                 }),
             FoldAccInit = {Limit, SkipCount, undefined, []},
-	    Options = [{dir, Dir}, {start_key, Start}],
-
-%%             {ok, {_, _, _, {Offset, ViewFoldAcc}}} =
-%%                 couch_view:fold(View, FoldlFun, FoldAccInit, Options),
-            {ok, {_, [{Offset, _}]} , ViewFoldAcc} =
+	        Options = [{dir, Dir}, {start_key, Start}],
+            {ok, {_, [{_, _}]} , {_, _, _, {Offset, ViewFoldAcc}}} =
                 couch_view:fold(View, FoldlFun, FoldAccInit, Options),
             {ok, {RowCount, Offset, ViewFoldAcc}};
         {not_found, Reason} ->
@@ -215,9 +214,11 @@ query_view(DbName, DesignName, ViewName, ViewFoldFun, #view_query_args{
                                 send_row = make_reduce_row_fold_fun(ViewFoldFun)
                             }),
                     FoldAccInit = {Limit, SkipCount, undefined, []},
-                    %% FIXME : tests throw exception error: undefined function couch_view:fold_reduce/7
-                    {ok, {_, _, _, AccResult}} = couch_view:fold_reduce(View, Dir, {StartKey, StartDocId},
-                        {EndKey, EndDocId}, GroupRowsFun, RespFun, FoldAccInit),
+                    {ok, {_, _, _, AccResult}} = couch_view:fold_reduce(View, RespFun, FoldAccInit,
+                        [{key_group_fun, GroupRowsFun}, {dir, Dir}, 
+                            {start_key, {StartKey, StartDocId}}
+                            % {end_key, {EndKey, EndDocId}}
+                            ]),
                     {ok, AccResult};
                 _ ->
                     throw({not_found, Reason})

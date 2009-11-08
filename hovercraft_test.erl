@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% File    : hovercraft.erl
+%%% File    : hovercraft_test.erl
 %%% Author  : J Chris Anderson <jchris@couch.io>
 %%% Description : Erlang CouchDB access.
 %%%
@@ -32,7 +32,7 @@ all(DbName) ->
     should_get_db_info(DbName),
     should_save_and_open_doc(DbName),
 %% FIXME    should_stream_attachment(DbName),
-%% FIXME    should_query_views(DbName),
+    should_query_views(DbName),
     should_error_on_missing_doc(DbName),
     should_save_bulk_docs(DbName),
     should_save_bulk_and_open_with_db(DbName),
@@ -148,8 +148,11 @@ should_query_views(DbName) ->
 
 should_query_map_view(DbName, DDocName) ->
     % use the default query arguments and row collector function
-    {ok, {RowCount, Offset, Rows}} =
+    {ok, ViewResp} =
         hovercraft:query_view(DbName, DDocName, <<"basic">>),
+    {RowCount, Offset, Rows} = ViewResp,
+    % ?LOG_INFO("{RowCount, Offset, Rows} ~p", [{RowCount, Offset, Rows}]),
+    
     % assert rows is the right length
     20 = length(Rows),
     RowCount = length(Rows),
@@ -169,6 +172,7 @@ should_query_reduce_view(DbName, DDocName) ->
         hovercraft:query_view(DbName, DDocName, <<"reduce-sum">>, #view_query_args{
             group_level = exact
         }),
+    ?LOG_INFO("Results ~p", [Results]),
     20 = length(Results).
 
 
