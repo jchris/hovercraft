@@ -196,11 +196,10 @@ query_view(DbName, undefined, <<"_all_docs">>, _ViewFoldFun, #view_query_args{
         true -> EndDocId
         end,
     FoldAccInit = {Limit, SkipCount, undefined, []},
-    UpdateSeq = couch_db:get_update_seq(Db),
     FoldlFun = couch_httpd_view:make_view_fold_fun(nil, QueryArgs, <<"">>, Db,
-        UpdateSeq, TotalRowCount, #view_fold_helper_funs{
+        TotalRowCount, #view_fold_helper_funs{
             reduce_count = fun couch_db:enum_docs_reduce_to_count/1,
-            start_response = fun start_map_view_fold_fun/6,
+            start_response = fun start_map_view_fold_fun/5,
             send_row = make_include_docs_row_fold_fun()
         }),
     AdapterFun = fun(#full_doc_info{id=Id}=FullDocInfo, Offset, Acc) ->
@@ -233,12 +232,11 @@ query_view(DbName, DesignName, ViewName, ViewFoldFun, #view_query_args{
         {ok, View, _Group} ->
             {ok, RowCount} = couch_view:get_row_count(View),
             Start = {StartKey, StartDocId},
-            UpdateSeq = couch_db:get_update_seq(Db),
             FoldlFun = couch_httpd_view:make_view_fold_fun(nil, 
-                QueryArgs, <<"">>, Db, UpdateSeq, RowCount, 
+                QueryArgs, <<"">>, Db, RowCount, 
                 #view_fold_helper_funs{
                     reduce_count = fun couch_view:reduce_to_count/1,
-                    start_response = fun start_map_view_fold_fun/6,
+                    start_response = fun start_map_view_fold_fun/5,
                     send_row = make_map_row_fold_fun(ViewFoldFun)
                 }),
             FoldAccInit = {Limit, SkipCount, undefined, []},
@@ -249,13 +247,11 @@ query_view(DbName, DesignName, ViewName, ViewFoldFun, #view_query_args{
         {not_found, Reason} ->
             case couch_view:get_reduce_view(Db, DesignId, ViewName, Stale) of
                 {ok, View, _Group} ->
-                    UpdateSeq = couch_db:get_update_seq(Db),
                     {ok, GroupRowsFun, RespFun} = 
                         couch_httpd_view:make_reduce_fold_funs(nil, 
                             GroupLevel, QueryArgs, <<"">>, 
-                            UpdateSeq,
                             #reduce_fold_helper_funs{
-                                start_response = fun start_reduce_view_fold_fun/4,
+                                start_response = fun start_reduce_view_fold_fun/3,
                                 send_row = make_reduce_row_fold_fun(ViewFoldFun)
                             }),
                     FoldAccInit = {Limit, SkipCount, undefined, []},
@@ -286,7 +282,7 @@ ejson_to_couch_doc({DocProps}) ->
     end,
     couch_doc:from_json_obj(Doc).
 
-start_map_view_fold_fun(_Req, _Etag, _RowCount, Offset, _Acc, _UpdateSeq) ->
+start_map_view_fold_fun(_Req, _Etag, _RowCount, Offset, _Acc) ->
     {ok, nil, {Offset, []}}.
 
 make_map_row_fold_fun(ViewFoldFun) ->
@@ -301,7 +297,7 @@ make_include_docs_row_fold_fun() ->
         {ok, {Offset, [D | Acc]}}
     end.
 
-start_reduce_view_fold_fun(_Req, _Etag, _Acc0, _UpdateSeq) ->
+start_reduce_view_fold_fun(_Req, _Etag, _Acc0) ->
     {ok, nil, []}.
 
 make_reduce_row_fold_fun(ViewFoldFun) ->
