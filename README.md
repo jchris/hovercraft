@@ -23,7 +23,7 @@ inside the CouchDB trunk directory and then launch CouchDB like this:
 This will open an interactive session. To run the tests, call 
 hovercraft:test/0 like this:
 
-    1> hovercraft:test().
+    1> hovercraft_test:all().
     [info] [<0.30.0>] Starting tests in <<"hovercraft-test">>
     ok
 
@@ -31,7 +31,7 @@ hovercraft:test/0 like this:
 
 To run the speed of light test, run hovercraft:lightning/0 like this:
 
-    2> hovercraft:lightning().
+    2> hovercraft_test:lightning().
     Inserted 100000 docs in 14.967256 seconds with batch size of 1000. (6681.251393040915 docs/sec)
     ok
 

@@ -77,7 +77,7 @@ lightning(BulkSize, NumDocs, DbName) ->
 should_create_db(DbName) ->
     hovercraft:delete_db(DbName),
     {ok, created} = hovercraft:create_db(DbName),
-    {ok, DbInfo} = hovercraft:db_info(DbName).
+    {ok, _DbInfo} = hovercraft:db_info(DbName).
 
 should_link_to_db_server(DbName) ->
     {ok, DbInfo} = hovercraft:db_info(DbName),
@@ -127,7 +127,7 @@ should_stream_attachment(DbName) ->
     Doc = {[{<<"foo">>, <<"bar">>},
         {<<"_attachments">>, {[{AName, {[
             {<<"content_type">>, <<"text/plain">>},
-            {<<"data">>, couch_util:encodeBase64(ABytes)}
+            {<<"data">>, base64:encode(ABytes)}
         ]}}]}}
     ]},
     {ok, {Resp}} = hovercraft:save_doc(DbName, Doc),
@@ -149,19 +149,18 @@ should_query_views(DbName) ->
 
 should_query_map_view(DbName, DDocName) ->
     % use the default query arguments and row collector function
-    {ok, {RowCount, Offset, Rows}} =
+    {ok, {RowCount, Offset, Rows}} = 
         hovercraft:query_view(DbName, DDocName, <<"basic">>),
-    % assert correct lengths
-    20 = RowCount,
-    20 = Offset,
+    % assert rows is the right length
+    20 = length(Rows),
+    RowCount = length(Rows),
+    0 = Offset,
     % assert we got every row
-    lists:foldl(fun({{RKey, RDocId}, RValue}, _) ->
-                    1 = RValue,
-                    {ok, {DocProps}} = hovercraft:open_doc(RDocId),
-                    RKey = proplists:get_value(<<"_rev">>, DocProps)
-                end,
-                Rows,
-                []).
+    lists:foldl(fun({{RKey, RDocId}, RValue}, _) -> 
+            1 = RValue,
+            {ok, {DocProps}} = hovercraft:open_doc(RDocId),
+            RKey = proplists:get_value(<<"_rev">>, DocProps)
+        end, Rows, []).
 
 should_query_reduce_view(DbName, DDocName) ->
     {ok, [Result]} =
