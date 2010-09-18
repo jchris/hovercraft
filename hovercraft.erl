@@ -143,7 +143,7 @@ start_attachment(DbName, DocId, AName) ->
     {ok, Pid}.
 
 %%--------------------------------------------------------------------
-q%% Function: next_attachment_bytes(Pid) -> {ok, done} | {error,Error}
+%% Function: next_attachment_bytes(Pid) -> {ok, done} | {error,Error}
 %% Description: Fetch attachment bytes
 %%--------------------------------------------------------------------
 next_attachment_bytes(Pid) ->
@@ -317,7 +317,7 @@ attachment_streamer(DbName, DocId, AName) ->
             throw({not_found, "Document is missing attachment"});
         [Rec] when is_record(Rec, att) ->
             Me = self(),
-            couch_doc:att_foldl_unzip(Rec,
+            couch_doc:att_foldl_decode(Rec,
                 fun(Bins, []) ->
                     BinSegment = list_to_binary(Bins),
                     receive
